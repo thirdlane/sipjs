@@ -623,6 +623,7 @@ UA.prototype.receiveRequest = function(request) {
       'Allow: '+ SIP.Utils.getAllowedMethods(this),
       'Accept: '+ C.ACCEPTED_BODY_TYPES
     ]);
+    this.emit('options');
   } else if (method === SIP.C.MESSAGE) {
     if (!this.listeners(methodLower).length) {
       // UA is not listening for this.  Reject immediately.
