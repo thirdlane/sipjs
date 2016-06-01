@@ -572,9 +572,17 @@ Session.prototype = {
       return;
     }
 
-    this.mediaHandler.setDescription(request.body)
-    .then(this.mediaHandler.getDescription.bind(this.mediaHandler, this.mediaHint))
-    .then(function(body) {
+    if (request.headers['Remote-Party-Id'] && request.headers['Remote-Party-Id'][0].raw){
+        var identity = SIP.Grammar.parse(request.headers['Remote-Party-Id'][0].raw, 'Name_Addr_Header')
+        if (identity) {
+            this.remoteIdentity = identity;
+            this.emit('rpid_update', this.remoteIdentity);
+        }
+    }
+
+    //this.mediaHandler.setDescription(request.body)
+     this.mediaHandler.getDescription.bind(this.mediaHandler, this.mediaHint).call()
+     .then(function(body) {
       request.reply(200, null, ['Contact: ' + self.contact], body,
         function() {
           self.status = C.STATUS_WAITING_FOR_ACK;
