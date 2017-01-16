@@ -27,39 +27,10 @@ var MediaHandler = function(session, options) {
   // old init() from here on
   var idx, jdx, length, server,
     self = this,
-    servers = [],
-    stunServers = options.stunServers || null,
-    turnServers = options.turnServers || null,
+    servers = options.iceServers || [],
     config = this.session.ua.configuration;
+  
   this.RTCConstraints = options.RTCConstraints || {};
-
-  if (!stunServers) {
-    stunServers = config.stunServers;
-  }
-
-  if(!turnServers) {
-    turnServers = config.turnServers;
-  }
-
-  /* Change 'url' to 'urls' whenever this issue is solved:
-   * https://code.google.com/p/webrtc/issues/detail?id=2096
-   */
-  [].concat(stunServers).forEach(function (server) {
-    servers.push({'url': server});
-  });
-
-  length = turnServers.length;
-  for (idx = 0; idx < length; idx++) {
-    server = turnServers[idx];
-    for (jdx = 0; jdx < server.urls.length; jdx++) {
-      servers.push({
-        'url': server.urls[jdx],
-        'username': server.username,
-        'credential': server.password
-      });
-    }
-  }
-
   this.onIceCompleted = SIP.Utils.defer();
   this.onIceCompleted.promise.then(function(pc) {
     self.emit('iceGatheringComplete', pc);
