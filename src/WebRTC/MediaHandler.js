@@ -27,8 +27,8 @@ var MediaHandler = function(session, options) {
   // old init() from here on
   var idx, jdx, length, server,
     self = this,
-    servers = options.iceServers || [],
-    config = this.session.ua.configuration;
+    config = this.session.ua.configuration,
+    servers = config.iceServers || [],
   
   this.RTCConstraints = options.RTCConstraints || {};
   this.onIceCompleted = SIP.Utils.defer();
