@@ -899,8 +899,7 @@ UA.prototype.loadConfig = function(configuration) {
       // Session parameters
       iceCheckingTimeout: 5000,
       noAnswerTimeout: 60,
-      stunServers: ['stun:stun.l.google.com:19302'],
-      turnServers: [],
+      iceServers: [],
 
       // Logging parameters
       traceSip: false,
@@ -970,7 +969,7 @@ UA.prototype.loadConfig = function(configuration) {
 
   SIP.Utils.optionsOverride(configuration, 'rel100', 'reliable', true, this.logger, SIP.C.supported.UNSUPPORTED);
 
-  var emptyArraysAllowed = ['stunServers', 'turnServers'];
+  var emptyArraysAllowed = ['iceServers'];
 
   // Check Optional parameters
   for(parameter in UA.configuration_check.optional) {
@@ -1155,9 +1154,8 @@ UA.configuration_skeleton = (function() {
       "replaces",
       "userAgentString", //SIP.C.USER_AGENT
       "autostart",
-      "stunServers",
+      "iceServers",
       "traceSip",
-      "turnServers",
       "usePreloadedRoute",
       "wsServerMaxReconnection",
       "wsServerReconnectionTimeout",
@@ -1468,78 +1466,14 @@ UA.configuration_check = {
       }
     },
 
-    stunServers: function(stunServers) {
-      var idx, length, stun_server;
-
-      if (typeof stunServers === 'string') {
-        stunServers = [stunServers];
-      } else if (!(stunServers instanceof Array)) {
-        return;
-      }
-
-      length = stunServers.length;
-      for (idx = 0; idx < length; idx++) {
-        stun_server = stunServers[idx];
-        if (!(/^stuns?:/.test(stun_server))) {
-          stun_server = 'stun:' + stun_server;
-        }
-
-        if(SIP.Grammar.parse(stun_server, 'stun_URI') === -1) {
-          return;
-        } else {
-          stunServers[idx] = stun_server;
-        }
-      }
-      return stunServers;
+    iceServers: function(iceServers) {
+      return iceServers;
     },
 
     traceSip: function(traceSip) {
       if (typeof traceSip === 'boolean') {
         return traceSip;
       }
-    },
-
-    turnServers: function(turnServers) {
-      var idx, jdx, length, turn_server, num_turn_server_urls, url;
-
-      if (turnServers instanceof Array) {
-        // Do nothing
-      } else {
-        turnServers = [turnServers];
-      }
-
-      length = turnServers.length;
-      for (idx = 0; idx < length; idx++) {
-        turn_server = turnServers[idx];
-        //Backwards compatibility: Allow defining the turn_server url with the 'server' property.
-        if (turn_server.server) {
-          turn_server.urls = [turn_server.server];
-        }
-
-        if (!turn_server.urls || !turn_server.username || !turn_server.password) {
-          return;
-        }
-
-        if (turn_server.urls instanceof Array) {
-          num_turn_server_urls = turn_server.urls.length;
-        } else {
-          turn_server.urls = [turn_server.urls];
-          num_turn_server_urls = 1;
-        }
-
-        for (jdx = 0; jdx < num_turn_server_urls; jdx++) {
-          url = turn_server.urls[jdx];
-
-          if (!(/^turns?:/.test(url))) {
-            url = 'turn:' + url;
-          }
-
-          if(SIP.Grammar.parse(url, 'turn_URI') === -1) {
-            return;
-          }
-        }
-      }
-      return turnServers;
     },
 
     userAgentString: function(userAgentString) {
