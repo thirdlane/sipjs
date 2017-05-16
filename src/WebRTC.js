@@ -3,6 +3,8 @@
  * @fileoverview WebRTC
  */
 
+var peerconn = require('traceablepeerconnection');
+
 module.exports = function (SIP, environment) {
 var WebRTC;
 
@@ -20,7 +22,7 @@ WebRTC.isSupported = function () {
 
   WebRTC.MediaStream = environment.MediaStream;
   WebRTC.getUserMedia = environment.getUserMedia;
-  WebRTC.RTCPeerConnection = environment.RTCPeerConnection;
+  WebRTC.RTCPeerConnection = peerconn;
   WebRTC.RTCSessionDescription = environment.RTCSessionDescription;
 
   if (WebRTC.RTCPeerConnection && WebRTC.RTCSessionDescription) {
