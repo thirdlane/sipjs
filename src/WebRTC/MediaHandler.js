@@ -40,7 +40,12 @@ var MediaHandler = function(session, options) {
     }
   });
 
-  this.peerConnection = new SIP.WebRTC.RTCPeerConnection({'iceServers': servers}, this.RTCConstraints);
+  var RTCPeerConnectionConfig = {
+            'iceServers': servers,
+            'rtcpMuxPolicy': 'negotiate'
+        }
+
+  this.peerConnection = new SIP.WebRTC.RTCPeerConnection(RTCPeerConnectionConfig, this.RTCConstraints);
 
   // Firefox (35.0.1) sometimes throws on calls to peerConnection.getRemoteStreams
   // even if peerConnection.onaddstream was just called. In order to make
