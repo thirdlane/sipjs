@@ -68,6 +68,7 @@ module.exports = function (SIP) {
             if (!self.iceCheckingTimer) {
                 self.iceCheckingTimer = SIP.Timers.setTimeout(function() {
                     self.logger.log('RTCIceChecking Timeout Triggered after '+config.iceCheckingTimeout+' milliseconds');
+                    self.emit('iceCheckingTimeout');
                     self.onIceCompleted.resolve(this);
                 }.bind(this.peerConnection), config.iceCheckingTimeout);
             }
