@@ -490,8 +490,7 @@ module.exports = function (SIP, environment) {
                 this.status = C.STATUS_NOT_READY;
                 this.error  = C.NETWORK_ERROR;
             }
-            // Transport Recovery process
-            this.recoverTransport();
+            // Will not start the recovery process here. Thirdlane Connect will handle it.
         }
     };
 
