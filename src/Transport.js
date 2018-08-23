@@ -250,9 +250,7 @@ Transport.prototype = {
 
     // CRLF Keep Alive response from server. Ignore it.
     if(data === '\r\n') {
-      SIP.Timers.clearTimeout(this.keepAliveTimeout);
-      this.keepAliveTimeout = null;
-
+      this.ua.emit('keep-alive');
       if (this.ua.configuration.traceSip === true) {
         this.logger.log('received WebSocket message with CRLF Keep Alive response');
       }
