@@ -246,11 +246,9 @@ Transport.prototype = {
   */
   onMessage: function(e) {
     var message, transaction,
-      data = e.data;
-
-    // CRLF Keep Alive response from server. Ignore it.
+    data = e.data;
+    this.ua.emit('keep-alive');
     if(data === '\r\n') {
-      this.ua.emit('keep-alive');
       if (this.ua.configuration.traceSip === true) {
         this.logger.log('received WebSocket message with CRLF Keep Alive response');
       }
