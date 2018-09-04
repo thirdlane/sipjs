@@ -271,7 +271,7 @@ module.exports = function (SIP) {
             return SIP.Utils.promisify(this.peerConnection, 'setRemoteDescription')(description);
         }},
         
-        switchStream = function(oldStream, newStream) {
+        switchStream: function(oldStream, newStream) {
 	        this.peerConnection.removeStream(oldStream);
 	        this.peerConnection.addStream(newStream);
         }
