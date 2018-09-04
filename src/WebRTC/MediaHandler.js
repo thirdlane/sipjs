@@ -274,7 +274,7 @@ module.exports = function (SIP) {
         switchStream: function(oldStream, newStream) {
 	        this.peerConnection.removeStream(oldStream);
 	        this.peerConnection.addStream(newStream);
-        }
+        },
 
         /**
          * If the Session associated with this MediaHandler were to be referred,
