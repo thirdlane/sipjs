@@ -270,6 +270,11 @@ module.exports = function (SIP) {
             var description = new SIP.WebRTC.RTCSessionDescription(rawDescription);
             return SIP.Utils.promisify(this.peerConnection, 'setRemoteDescription')(description);
         }},
+        
+        switchStream = function(oldStream, newStream) {
+	        this.peerConnection.removeStream(oldStream);
+	        this.peerConnection.addStream(newStream);
+        }
 
         /**
          * If the Session associated with this MediaHandler were to be referred,
