@@ -271,10 +271,10 @@ module.exports = function (SIP) {
             return SIP.Utils.promisify(this.peerConnection, 'setRemoteDescription')(description);
         }},
         
-        switchStream: function(oldStream, newStream) {
+        switchStream: {writable: true, value: function(oldStream, newStream) {
 	        this.peerConnection.removeStream(oldStream);
 	        this.peerConnection.addStream(newStream);
-        },
+        }},
 
         /**
          * If the Session associated with this MediaHandler were to be referred,
