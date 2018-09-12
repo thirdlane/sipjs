@@ -471,79 +471,82 @@ Session.prototype = {
   /**
    * Hold
    */
-  hold: function() {
+  hold: function(options) {
 
-    if (this.status !== C.STATUS_WAITING_FOR_ACK && this.status !== C.STATUS_CONFIRMED) {
-      throw new SIP.Exceptions.InvalidStateError(this.status);
-    }
-
-    this.mediaHandler.hold();
-
-    // Check if RTCSession is ready to send a reINVITE
-    if (!this.isReadyToReinvite()) {
-      /* If there is a pending 'unhold' action, cancel it and don't queue this one
-       * Else, if there isn't any 'hold' action, add this one to the queue
-       * Else, if there is already a 'hold' action, skip
-       */
-      if (this.pending_actions.isPending('unhold')) {
-        this.pending_actions.pop('unhold');
-      } else if (!this.pending_actions.isPending('hold')) {
-        this.pending_actions.push('hold');
+      if (this.status !== C.STATUS_WAITING_FOR_ACK && this.status !== C.STATUS_CONFIRMED) {
+          throw new SIP.Exceptions.InvalidStateError(this.status);
       }
-      return;
-    } else if (this.local_hold === true) {
-        return;
-    }
 
-    this.onhold('local');
+      this.mediaHandler.hold();
 
-    this.sendReinvite({
-      mangle: function(body){
+      // Check if RTCSession is ready to send a reINVITE
+      if (!this.isReadyToReinvite()) {
+          /* If there is a pending 'unhold' action, cancel it and don't queue this one
+           * Else, if there isn't any 'hold' action, add this one to the queue
+           * Else, if there is already a 'hold' action, skip
+           */
+          if (this.pending_actions.isPending('unhold')) {
+              this.pending_actions.pop('unhold');
+          } else if (!this.pending_actions.isPending('hold')) {
+              this.pending_actions.push('hold');
+          }
+          return;
+      } else if (this.local_hold === true) {
+          return;
+      }
 
-        // Don't receive media
-        // TODO - This will break for media streams with different directions.
-        if (!(/a=(sendrecv|sendonly|recvonly|inactive)/).test(body)) {
-          body = body.replace(/(m=[^\r]*\r\n)/g, '$1a=sendonly\r\n');
-        } else {
-          body = body.replace(/a=sendrecv\r\n/g, 'a=sendonly\r\n');
-          body = body.replace(/a=recvonly\r\n/g, 'a=inactive\r\n');
+      this.onhold('local');
+
+      options = options || {};
+      options.mangle = function(body){
+
+          // Don't receive media
+          // TODO - This will break for media streams with different directions.
+          body = body.replace(/a=setup:passive\r\n/g, 'a=setup:actpass\r\n');
+          body = body.replace(/a=setup:active\r\n/g, 'a=setup:actpass\r\n')
+          if (!(/a=(sendrecv|sendonly|recvonly|inactive)/).test(body)) {
+              body = body.replace(/(m=[^\r]*\r\n)/g, '$1a=sendonly\r\n');
+          } else {
+              body = body.replace(/a=sendrecv\r\n/g, 'a=sendonly\r\n');
+              body = body.replace(/a=recvonly\r\n/g, 'a=inactive\r\n');
+          }
+
+          return body;
+      };
+
+      this.sendReinvite(options, 'createOffer');
+  },
+
+    /**
+     * Unhold
+     */
+    unhold: function(options) {
+
+        if (this.status !== C.STATUS_WAITING_FOR_ACK && this.status !== C.STATUS_CONFIRMED) {
+            throw new SIP.Exceptions.InvalidStateError(this.status);
         }
 
-        return body;
-      }
-    });
-  },
+        this.mediaHandler.unhold();
 
-  /**
-   * Unhold
-   */
-  unhold: function() {
+        if (!this.isReadyToReinvite()) {
+            /* If there is a pending 'hold' action, cancel it and don't queue this one
+             * Else, if there isn't any 'unhold' action, add this one to the queue
+             * Else, if there is already a 'unhold' action, skip
+             */
+            if (this.pending_actions.isPending('hold')) {
+                this.pending_actions.pop('hold');
+            } else if (!this.pending_actions.isPending('unhold')) {
+                this.pending_actions.push('unhold');
+            }
+            return;
+        } else if (this.local_hold === false) {
+            return;
+        }
 
-    if (this.status !== C.STATUS_WAITING_FOR_ACK && this.status !== C.STATUS_CONFIRMED) {
-      throw new SIP.Exceptions.InvalidStateError(this.status);
-    }
+        this.onunhold('local');
 
-    this.mediaHandler.unhold();
-
-    if (!this.isReadyToReinvite()) {
-      /* If there is a pending 'hold' action, cancel it and don't queue this one
-       * Else, if there isn't any 'unhold' action, add this one to the queue
-       * Else, if there is already a 'unhold' action, skip
-       */
-      if (this.pending_actions.isPending('hold')) {
-        this.pending_actions.pop('hold');
-      } else if (!this.pending_actions.isPending('unhold')) {
-        this.pending_actions.push('unhold');
-      }
-      return;
-    } else if (this.local_hold === false) {
-      return;
-    }
-
-    this.onunhold('local');
-
-    this.sendReinvite();
-  },
+        this.sendReinvite(options, 'createOffer');
+    },
 
   /**
    * isOnHold
@@ -611,7 +614,7 @@ Session.prototype = {
     });
   },
 
-  sendReinvite: function(options) {
+  sendReinvite: function(options, forceMethod) {
     options = options || {};
 
     var
@@ -641,7 +644,7 @@ Session.prototype = {
 
     this.receiveResponse = this.receiveReinviteResponse;
     //REVISIT
-    this.mediaHandler.getDescription(self.mediaHint)
+    this.mediaHandler.getDescription(self.mediaHint, forceMethod)
     .then(mangle)
     .then(
       function(body){

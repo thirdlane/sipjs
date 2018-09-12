@@ -191,7 +191,7 @@ module.exports = function (SIP) {
          * @param {SIP.WebRTC.MediaStream | (getUserMedia constraints)} [mediaHint]
          *        the MediaStream (or the constraints describing it) to be used for the session
          */
-        getDescription: {writable: true, value: function getDescription (mediaHint) {
+        getDescription: {writable: true, value: function getDescription (mediaHint, forceMethod) {
             var self = this;
             var acquire = self.mediaStreamManager.acquire;
             if (acquire.length > 1) {
@@ -264,6 +264,10 @@ module.exports = function (SIP) {
                 type: this.hasOffer('local') ? 'answer' : 'offer',
                 sdp: sdp
             };
+
+            if (rawDescription.type === 'answer' && this.peerConnection.remoteDescription.sdp){
+                return SIP.Utils.Promise.resolve(this.peerConnection.remoteDescription);
+            }
 
             this.emit('setDescription', rawDescription);
 
@@ -437,18 +441,22 @@ module.exports = function (SIP) {
 
 // Internal functions
         hasOffer: {writable: true, value: function hasOffer (where) {
-            var offerState = 'have-' + where + '-offer';
-            return this.peerConnection.signalingState === offerState;
+            var lookupFor = where+'Description';
+            return Boolean(this.peerConnection[lookupFor].sdp && this.peerConnection[lookupFor].type === 'offer');
             // TODO consider signalingStates with 'pranswer'?
         }},
 
-        createOfferOrAnswer: {writable: true, value: function createOfferOrAnswer (constraints) {
+        createOfferOrAnswer: {writable: true, value: function createOfferOrAnswer (constraints, forceMethod) {
             var self = this;
             var methodName;
             var pc = self.peerConnection;
 
             self.ready = false;
-            methodName = self.hasOffer('remote') ? 'createAnswer' : 'createOffer';
+            if(!forceMethod){
+                methodName = self.hasOffer('remote') ? 'createAnswer' : 'createOffer';
+            } else {
+                methodName = forceMethod;
+            }
 
             return SIP.Utils.promisify(pc, methodName, true)(constraints)
                 .then(SIP.Utils.promisify(pc, 'setLocalDescription'))
