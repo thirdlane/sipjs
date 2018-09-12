@@ -249,9 +249,8 @@ module.exports = function (SIP) {
                     }
 
                     self.render();
-                    return self.createOfferOrAnswer(self.RTCConstraints);
-                })
-                ;
+                    return self.createOfferOrAnswer(self.RTCConstraints, forceMethod);
+                });
         }},
 
         /**
@@ -274,7 +273,7 @@ module.exports = function (SIP) {
             var description = new SIP.WebRTC.RTCSessionDescription(rawDescription);
             return SIP.Utils.promisify(this.peerConnection, 'setRemoteDescription')(description);
         }},
-        
+
         switchStream: {writable: true, value: function(oldStream, newStream) {
 	        this.peerConnection.removeStream(oldStream);
 	        this.peerConnection.addStream(newStream);
