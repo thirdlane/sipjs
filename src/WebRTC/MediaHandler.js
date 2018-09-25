@@ -275,8 +275,12 @@ module.exports = function (SIP) {
         }},
 
         switchStream: {writable: true, value: function(oldStream, newStream) {
+            var self = this;
 	        this.peerConnection.removeStream(oldStream);
 	        this.peerConnection.addStream(newStream);
+	        this.peerConnection.createOffer(function(offer){
+                   self.peerConnection.setLocalDescription(offer, function() {}, function(){},{offerToReceiveAudio: true, offerToReceiveVideo: false})
+            })
         }},
 
         /**
