@@ -584,6 +584,7 @@ Session.prototype = {
     }
 
     //this.mediaHandler.setDescription(request.body)
+      // this.mediaHandler.getDescription.bind(this.mediaHandler, this.mediaHint).call()
       var body = this.mediaHandler.peerConnection.localDescription.sdp;
       request.reply(200, null, ['Contact: ' + self.contact], body,
         function() {
