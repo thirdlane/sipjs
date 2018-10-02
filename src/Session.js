@@ -576,7 +576,7 @@ Session.prototype = {
     }
 
     if (request.headers['Remote-Party-Id'] && request.headers['Remote-Party-Id'][0].raw){
-        var identity = SIP.Grammar.parse(request.headers['Remote-Party-Id'][0].raw, 'Name_Addr_Header')
+        var identity = SIP.Grammar.parse(request.headers['Remote-Party-Id'][0].raw, 'Name_Addr_Header');
         if (identity) {
             this.remoteIdentity = identity;
             this.emit('rpid_update', this.remoteIdentity);
@@ -584,8 +584,7 @@ Session.prototype = {
     }
 
     //this.mediaHandler.setDescription(request.body)
-     this.mediaHandler.getDescription.bind(this.mediaHandler, this.mediaHint).call()
-     .then(function(body) {
+      var body = this.mediaHandler.peerConnection.localDescription.sdp;
       request.reply(200, null, ['Contact: ' + self.contact], body,
         function() {
           self.status = C.STATUS_WAITING_FOR_ACK;
@@ -601,7 +600,7 @@ Session.prototype = {
             self.onhold('remote');
           }
         });
-    })
+    /*})
     .catch(function onFailure (e) {
       var statusCode;
       if (e instanceof SIP.Exceptions.GetDescriptionError) {
@@ -611,7 +610,7 @@ Session.prototype = {
         statusCode = 488;
       }
       request.reply(statusCode);
-    });
+    });*/
   },
 
   sendReinvite: function(options, forceMethod) {
