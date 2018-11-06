@@ -12,22 +12,22 @@ module.exports = function (SIP, environment) {
     var UA,
         C = {
             // UA status codes
-            STATUS_INIT       : 0,
-            STATUS_STARTING   : 1,
-            STATUS_READY      : 2,
+            STATUS_INIT:        0,
+            STATUS_STARTING:    1,
+            STATUS_READY:       2,
             STATUS_USER_CLOSED: 3,
-            STATUS_NOT_READY  : 4,
+            STATUS_NOT_READY:   4,
 
             // UA error codes
             CONFIGURATION_ERROR: 1,
-            NETWORK_ERROR      : 2,
+            NETWORK_ERROR:       2,
 
             /* UA events and corresponding SIP Methods.
              * Dynamically added to 'Allow' header field if the
              * corresponding event handler is set.
              */
             EVENT_METHODS: {
-                'invite' : 'INVITE',
+                'invite':  'INVITE',
                 'message': 'MESSAGE'
             },
 
@@ -46,10 +46,10 @@ module.exports = function (SIP, environment) {
             ],
 
             MAX_FORWARDS: 70,
-            TAG_LENGTH  : 10
+            TAG_LENGTH:   10
         };
 
-    UA           = function (configuration) {
+    UA = function (configuration) {
         var self = this;
 
         // Helper function for forwarding events
@@ -61,7 +61,7 @@ module.exports = function (SIP, environment) {
         // Set Accepted Body Types
         C.ACCEPTED_BODY_TYPES = C.ACCEPTED_BODY_TYPES.toString();
 
-        this.log    = new SIP.LoggerFactory();
+        this.log = new SIP.LoggerFactory();
         this.logger = this.getLogger('sip.ua');
 
         this.cache = {
@@ -69,27 +69,27 @@ module.exports = function (SIP, environment) {
         };
 
         this.configuration = {};
-        this.dialogs       = {};
+        this.dialogs = {};
 
         //User actions outside any session/dialog (MESSAGE)
         this.applicants = {};
 
-        this.data          = {};
-        this.sessions      = {};
+        this.data = {};
+        this.sessions = {};
         this.subscriptions = {};
-        this.transport     = null;
-        this.contact       = null;
-        this.status        = C.STATUS_INIT;
-        this.error         = null;
-        this.transactions  = {
+        this.transport = null;
+        this.contact = null;
+        this.status = C.STATUS_INIT;
+        this.error = null;
+        this.transactions = {
             nist: {},
             nict: {},
-            ist : {},
-            ict : {}
+            ist:  {},
+            ict:  {}
         };
 
         this.transportRecoverAttempts = 0;
-        this.transportRecoveryTimer   = null;
+        this.transportRecoveryTimer = null;
 
         Object.defineProperties(this, {
             transactionsCount: {
@@ -165,7 +165,7 @@ module.exports = function (SIP, environment) {
             this.loadConfig(configuration);
         } catch (e) {
             this.status = C.STATUS_NOT_READY;
-            this.error  = C.CONFIGURATION_ERROR;
+            this.error = C.CONFIGURATION_ERROR;
             throw e;
         }
 
@@ -194,10 +194,36 @@ module.exports = function (SIP, environment) {
 //=================
 
     UA.prototype.register = function (options) {
-        this.configuration.register = true;
-        this.registerContext.register(options);
+        const self = this;
+        return new Promise((resolve, reject) => {
+            this.configuration.register = true;
 
-        return this;
+            //Avoid Leakage of handlers;
+            const resolveFn = function (){
+                this.registerContext.removeListener('registered', resolveFn);
+                this.registerContext.removeListener('failed', rejectFn);
+                this.registerContext.removeListener('unregistered', rejectFn);
+                resolve();
+            }.bind(self);
+
+            const rejectFn = function () {
+                this.registerContext.removeListener('registered', resolveFn);
+                this.registerContext.removeListener('failed', rejectFn);
+                this.registerContext.removeListener('unregistered', rejectFn);
+                reject();
+            }.bind(self);
+
+            //For sure, for sure
+            this.registerContext.removeListener('registered', resolveFn);
+            this.registerContext.removeListener('failed', rejectFn);
+            this.registerContext.removeListener('unregistered', rejectFn);
+
+            this.registerContext.on('registered', resolveFn);
+            this.registerContext.on('failed', rejectFn);
+            this.registerContext.on('unregistered', rejectFn);
+
+            this.registerContext.register(options);
+        });
     };
 
     /**
@@ -207,12 +233,14 @@ module.exports = function (SIP, environment) {
      *
      */
     UA.prototype.unregister = function (options) {
-        this.configuration.register = false;
+        return new Promise(function (resolve, reject) {
+            this.configuration.register = false;
+            if (this.isConnected()) {
+                this.registerContext.unregister(options);
+            }
+            resolve();
+        }.bind(this));
 
-        var context = this.registerContext;
-        this.afterConnected(context.unregister.bind(context, options));
-
-        return this;
     };
 
     UA.prototype.isRegistered = function () {
@@ -293,65 +321,118 @@ module.exports = function (SIP, environment) {
      * Gracefully close.
      *
      */
-    UA.prototype.stop = function () {
-        var session, subscription, applicant,
-            ua = this;
+    UA.prototype.stop = function (opts) {
+        return new Promise((resolve, reject) => {
+            var session, subscription, applicant,
+                ua = this;
 
-        function transactionsListener() {
-            if (ua.nistTransactionsCount === 0 && ua.nictTransactionsCount === 0) {
-                ua.removeListener('transactionDestroyed', transactionsListener);
-                ua.transport.disconnect();
+            function transactionsListener() {
+                if (ua.nistTransactionsCount === 0 && ua.nictTransactionsCount === 0) {
+                    ua.removeListener('transactionDestroyed', transactionsListener);
+                    ua.transport.disconnect(opts);
+                    resolve();
+                }
             }
+
+            this.logger.log('user requested closure...');
+
+            if (this.reconnectionTimeout) {
+                clearTimeout(self.reconnectionTimeout);
+            }
+
+            if (this.status === C.STATUS_USER_CLOSED) {
+                this.logger.warn('UA already closed');
+                resolve();
+            }
+
+            // Clear transportRecoveryTimer
+            SIP.Timers.clearTimeout(this.transportRecoveryTimer);
+
+            // Close registerContext
+            this.logger.log('closing registerContext');
+            this.registerContext.close();
+
+            // Run  _terminate_ on every Session
+            for (session in this.sessions) {
+                this.logger.log('closing session ' + session);
+                this.sessions[session].terminate();
+            }
+
+            //Run _close_ on every Subscription
+            for (subscription in this.subscriptions) {
+                this.logger.log('unsubscribing from subscription ' + subscription);
+                this.subscriptions[subscription].close();
+            }
+
+            // Run  _close_ on every applicant
+            for (applicant in this.applicants) {
+                this.applicants[applicant].close();
+            }
+
+            this.status = C.STATUS_USER_CLOSED;
+
+            /*
+             * If the remaining transactions are all INVITE transactions, there is no need to
+             * wait anymore because every session has already been closed by this method.
+             * - locally originated sessions where terminated (CANCEL or BYE)
+             * - remotely originated sessions where rejected (4XX) or terminated (BYE)
+             * Remaining INVITE transactions belong tho sessions that where answered. This are in
+             * 'accepted' state due to timers 'L' and 'M' defined in [RFC 6026]
+             */
+            if (this.nistTransactionsCount === 0 && this.nictTransactionsCount === 0) {
+                this.transport.disconnect(opts);
+                resolve();
+            } else {
+                this.on('transactionDestroyed', transactionsListener);
+            }
+
+        });
+    };
+
+    //Idempotent process of connection.
+    // unregister -> disconnect -> connect -> register;
+    UA.prototype.connect = function () {
+        const TRANSPORT_CONNECTION_TIMEOUT = 5000;
+        const REGISTER_TIMEOUTE = 5000;
+        const UNREGISTER_TIMEOUT = 5000;
+
+        const server = this.getNextWsServer();
+
+        if (!this.transport) {
+            this.transport = new SIP.Transport(this, server);
         }
 
-        this.logger.log('user requested closure...');
-
-        if (this.status === C.STATUS_USER_CLOSED) {
-            this.logger.warn('UA already closed');
-            return this;
-        }
-
-        // Clear transportRecoveryTimer
-        SIP.Timers.clearTimeout(this.transportRecoveryTimer);
-
-        // Close registerContext
-        this.logger.log('closing registerContext');
-        this.registerContext.close();
-
-        // Run  _terminate_ on every Session
-        for (session in this.sessions) {
-            this.logger.log('closing session ' + session);
-            this.sessions[session].terminate();
-        }
-
-        //Run _close_ on every Subscription
-        for (subscription in this.subscriptions) {
-            this.logger.log('unsubscribing from subscription ' + subscription);
-            this.subscriptions[subscription].close();
-        }
-
-        // Run  _close_ on every applicant
-        for (applicant in this.applicants) {
-            this.applicants[applicant].close();
-        }
-
-        this.status = C.STATUS_USER_CLOSED;
-
-        /*
-         * If the remaining transactions are all INVITE transactions, there is no need to
-         * wait anymore because every session has already been closed by this method.
-         * - locally originated sessions where terminated (CANCEL or BYE)
-         * - remotely originated sessions where rejected (4XX) or terminated (BYE)
-         * Remaining INVITE transactions belong tho sessions that where answered. This are in
-         * 'accepted' state due to timers 'L' and 'M' defined in [RFC 6026]
-         */
-        if (this.nistTransactionsCount === 0 && this.nictTransactionsCount === 0) {
-            this.transport.disconnect();
-        } else {
-            this.on('transactionDestroyed', transactionsListener);
-        }
-
-        return this;
+        //Iterate over an array funcs that return promises,
+        //and execute functions sequentially, waiting for the promise from previous to resolve;
+        return [
+            () => {
+                return Promise.race([
+                    this.stop({silent: true}),
+                    new Promise(function (resolve, reject) {
+                        setTimeout(reject, UNREGISTER_TIMEOUT);
+                    })
+                ])
+            },
+            () => {
+                return Promise.race([
+                    this.transport.connect(),
+                    new Promise(function (resolve, reject) {
+                        setTimeout(reject, TRANSPORT_CONNECTION_TIMEOUT);
+                    })])
+            },
+            () => {
+                this.status = C.STATUS_READY;
+                return Promise.race([
+                    this.register(),
+                    new Promise(function (resolve, reject) {
+                        setTimeout(reject, REGISTER_TIMEOUTE);
+                    })]);
+            }
+        ].reduce((promise, i) => {
+            return promise.then(() => {
+                return i();
+            });
+        }, Promise.resolve());
     };
 
     /**
@@ -360,11 +441,51 @@ module.exports = function (SIP, environment) {
      *
      */
     UA.prototype.start = function () {
-        var server;
+        const RECONNECTION_TIMEOUT = 20000;
+        const self = this;
+
+        this.status = C.STATUS_STARTING;
+
+        function tryReconnect() {
+            if (!self.reconnectionTimeout) {
+                self.reconnectionTimeout = setTimeout(function () {
+                    if (C.STATUS_USER_CLOSED) {
+                        return;
+                    }
+                    self.reconnectionTimeout = null;
+                    self.connect()
+                        .catch(function () {
+                            self.emit('connect_failed');
+                        });
+                }, RECONNECTION_TIMEOUT);
+            }
+        }
+
+        this.on('connect_failed', function () {
+            tryReconnect();
+        });
+
+        this.on('disconnected', function () {
+            tryReconnect();
+        });
+
+        this.on('keepAliveTimeout', function () {
+            this.emit('disconnected', {
+                transport: this.transport,
+                code:      this.transport.lastTransportError.code,
+                reason:    this.transport.lastTransportError.reason
+            });
+        });
+
+        return self.connect().catch(function () {
+            self.emit('connect_failed');
+        });
+
+        /*var server;
 
         this.logger.log('user requested startup...');
         if (this.status === C.STATUS_INIT) {
-            server      = this.getNextWsServer();
+            server = this.getNextWsServer();
             this.status = C.STATUS_STARTING;
             new SIP.Transport(this, server);
         } else if (this.status === C.STATUS_USER_CLOSED) {
@@ -379,7 +500,7 @@ module.exports = function (SIP, environment) {
             this.logger.error('Connection is down. Auto-Recovery system is trying to connect');
         }
 
-        return this;
+        return this;*/
     };
 
     /**
@@ -399,7 +520,7 @@ module.exports = function (SIP, environment) {
 //===============================
 
     UA.prototype.saveCredentials = function (credentials) {
-        this.cache.credentials[credentials.realm]                  = this.cache.credentials[credentials.realm] || {};
+        this.cache.credentials[credentials.realm] = this.cache.credentials[credentials.realm] || {};
         this.cache.credentials[credentials.realm][credentials.uri] = credentials;
 
         return this;
@@ -411,7 +532,7 @@ module.exports = function (SIP, environment) {
         realm = request.ruri.host;
 
         if (this.cache.credentials[realm] && this.cache.credentials[realm][request.ruri]) {
-            credentials        = this.cache.credentials[realm][request.ruri];
+            credentials = this.cache.credentials[realm][request.ruri];
             credentials.method = request.method;
         }
 
@@ -488,7 +609,7 @@ module.exports = function (SIP, environment) {
             this.closeSessionsOnTransportError();
             if (!this.error || this.error !== C.NETWORK_ERROR) {
                 this.status = C.STATUS_NOT_READY;
-                this.error  = C.NETWORK_ERROR;
+                this.error = C.NETWORK_ERROR;
             }
             // Will not start the recovery process here. Thirdlane Connect will handle it.
         }
@@ -514,7 +635,7 @@ module.exports = function (SIP, environment) {
         }
 
         this.status = C.STATUS_READY;
-        this.error  = null;
+        this.error = null;
 
         if (this.configuration.register) {
             this.configuration.authenticationFactory.initialize().then(function () {
@@ -537,7 +658,7 @@ module.exports = function (SIP, environment) {
     UA.prototype.onTransportConnecting = function (transport, attempts) {
         this.emit('connecting', {
             transport: transport,
-            attempts : attempts
+            attempts:  attempts
         });
     };
 
@@ -590,9 +711,9 @@ module.exports = function (SIP, environment) {
 
         // Check that request URI points to us
         if (!(ruriMatches(this.configuration.uri) ||
-            ruriMatches(this.contact.uri) ||
-            ruriMatches(this.contact.pub_gruu) ||
-            ruriMatches(this.contact.temp_gruu))) {
+                ruriMatches(this.contact.uri) ||
+                ruriMatches(this.contact.pub_gruu) ||
+                ruriMatches(this.contact.temp_gruu))) {
             this.logger.warn('Request-URI does not point to us');
             if (request.method !== SIP.C.ACK) {
                 request.reply_sl(404);
@@ -630,8 +751,8 @@ module.exports = function (SIP, environment) {
                 request.reply(405, null, ['Allow: ' + SIP.Utils.getAllowedMethods(this)]);
                 return;
             }
-            message              = new SIP.ServerContext(this, request);
-            message.body         = request.body;
+            message = new SIP.ServerContext(this, request);
+            message.body = request.body;
             message.content_type = request.getHeader('Content-Type') || 'text/plain';
 
             request.reply(200, null);
@@ -668,7 +789,7 @@ module.exports = function (SIP, environment) {
 
                     var isMediaSupported = this.configuration.mediaHandlerFactory.isSupported;
                     if (!isMediaSupported || isMediaSupported()) {
-                        session          = new SIP.InviteServerContext(this, request);
+                        session = new SIP.InviteServerContext(this, request);
                         session.replacee = replacedDialog && replacedDialog.owner;
                         session.on('invite', function () {
                             self.emit('invite', this);
@@ -808,7 +929,7 @@ module.exports = function (SIP, environment) {
     UA.prototype.recoverTransport = function (ua) {
         var idx, length, k, nextRetry, count, server;
 
-        ua    = ua || this;
+        ua = ua || this;
         count = ua.transportRecoverAttempts;
 
         length = ua.configuration.wsServers.length;
@@ -818,13 +939,13 @@ module.exports = function (SIP, environment) {
 
         server = ua.getNextWsServer();
 
-        k         = Math.floor((Math.random() * Math.pow(2, count)) + 1);
+        k = Math.floor((Math.random() * Math.pow(2, count)) + 1);
         nextRetry = k * ua.configuration.connectionRecoveryMinInterval;
 
         if (nextRetry > ua.configuration.connectionRecoveryMaxInterval) {
             this.logger.log('time for next connection attempt exceeds connectionRecoveryMaxInterval, resetting counter');
             nextRetry = ua.configuration.connectionRecoveryMinInterval;
-            count     = 0;
+            count = 0;
         }
 
         this.logger.log('next connection attempt in ' + nextRetry + ' seconds');
@@ -862,13 +983,13 @@ module.exports = function (SIP, environment) {
                  */
                 viaHost: SIP.Utils.createRandomToken(12) + '.invalid',
 
-                uri      : new SIP.URI('sip', 'anonymous.' + SIP.Utils.createRandomToken(6), 'anonymous.invalid', null, null),
+                uri:       new SIP.URI('sip', 'anonymous.' + SIP.Utils.createRandomToken(6), 'anonymous.invalid', null, null),
                 wsServers: [{
-                    scheme : 'WSS',
+                    scheme:  'WSS',
                     sip_uri: '<sip:edge.sip.onsip.com;transport=ws;lr>',
-                    status : 0,
-                    weight : 0,
-                    ws_uri : 'wss://edge.sip.onsip.com'
+                    status:  0,
+                    weight:  0,
+                    ws_uri:  'wss://edge.sip.onsip.com'
                 }],
 
                 // Password
@@ -876,11 +997,11 @@ module.exports = function (SIP, environment) {
 
                 // Registration parameters
                 registerExpires: 600,
-                register       : true,
+                register:        true,
                 registrarServer: null,
 
                 // Transport related parameters
-                wsServerMaxReconnection    : 3,
+                wsServerMaxReconnection:     3,
                 wsServerReconnectionTimeout: 4,
 
                 connectionRecoveryMinInterval: 2,
@@ -897,22 +1018,22 @@ module.exports = function (SIP, environment) {
 
                 // Session parameters
                 iceCheckingTimeout: 5000,
-                noAnswerTimeout   : 60,
-                iceServers        : [],
-                RTCConstraints    : {},
+                noAnswerTimeout:    60,
+                iceServers:         [],
+                RTCConstraints:     {},
                 iceTransportPolicy: 'all',
 
                 // Logging parameters
                 traceSip: false,
 
                 // Hacks
-                hackViaTcp                     : false,
-                hackIpInContact                : false,
-                hackWssInTransport             : false,
+                hackViaTcp:                      false,
+                hackIpInContact:                 false,
+                hackWssInTransport:              false,
                 hackAllowUnregisteredOptionTags: false,
 
                 contactTransport: 'ws',
-                forceRport      : false,
+                forceRport:       false,
 
                 //autostarting
                 autostart: true,
@@ -958,7 +1079,7 @@ module.exports = function (SIP, environment) {
             if (!configuration.hasOwnProperty(parameter)) {
                 throw new SIP.Exceptions.ConfigurationError(parameter);
             } else {
-                value         = configuration[parameter];
+                value = configuration[parameter];
                 checked_value = UA.configuration_check.mandatory[parameter](value);
                 if (checked_value !== undefined) {
                     settings[parameter] = checked_value;
@@ -1025,8 +1146,8 @@ module.exports = function (SIP, environment) {
         settings.sipjsId = SIP.Utils.createRandomToken(5);
 
         // String containing settings.uri without scheme and user.
-        hostportParams          = settings.uri.clone();
-        hostportParams.user     = null;
+        hostportParams = settings.uri.clone();
+        hostportParams.user = null;
         settings.hostportParams = hostportParams.toRaw().replace(/^sip:/i, '');
 
         /* Check whether authorizationUser is explicitly defined.
@@ -1038,8 +1159,8 @@ module.exports = function (SIP, environment) {
 
         /* If no 'registrarServer' is set use the 'uri' value without user portion. */
         if (!settings.registrarServer) {
-            registrarServer          = settings.uri.clone();
-            registrarServer.user     = null;
+            registrarServer = settings.uri.clone();
+            registrarServer.user = null;
             settings.registrarServer = registrarServer;
         }
 
@@ -1062,10 +1183,10 @@ module.exports = function (SIP, environment) {
         }
 
         this.contact = {
-            pub_gruu : null,
+            pub_gruu:  null,
             temp_gruu: null,
-            uri      : new SIP.URI('sip', SIP.Utils.createRandomToken(8), settings.viaHost, null, {transport: settings.contactTransport}),
-            toString : function (options) {
+            uri:       new SIP.URI('sip', SIP.Utils.createRandomToken(8), settings.viaHost, null, {transport: settings.contactTransport}),
+            toString:  function (options) {
                 options = options || {};
 
                 var
@@ -1179,17 +1300,17 @@ module.exports = function (SIP, environment) {
             ];
 
         for (idx in parameters) {
-            parameter           = parameters[idx];
+            parameter = parameters[idx];
             skeleton[parameter] = {
-                value       : '',
-                writable    : false,
+                value:        '',
+                writable:     false,
                 configurable: false
             };
         }
 
         skeleton['register'] = {
-            value       : '',
-            writable    : true,
+            value:        '',
+            writable:     true,
             configurable: false
         };
 
@@ -1538,7 +1659,7 @@ module.exports = function (SIP, environment) {
                         function patchMethod(methodName) {
                             var method = mediaHandler[methodName];
                             if (method.length > 1) {
-                                var callbacksFirst       = methodName === 'getDescription';
+                                var callbacksFirst = methodName === 'getDescription';
                                 mediaHandler[methodName] = SIP.Utils.promisify(mediaHandler, methodName, callbacksFirst);
                             }
                         }
@@ -1558,6 +1679,6 @@ module.exports = function (SIP, environment) {
         }
     };
 
-    UA.C   = C;
+    UA.C = C;
     SIP.UA = UA;
 };

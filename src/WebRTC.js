@@ -3,7 +3,7 @@
  * @fileoverview WebRTC
  */
 
-var peerconn = require('traceablepeerconnection');
+var peerconn = require('./WebRTC/traceablepeerconnection');
 
 module.exports = function (SIP, environment) {
 var WebRTC;

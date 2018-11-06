@@ -50,7 +50,6 @@
   "dependencies": {
     "ws": "^0.6.4",
     "pegjs": "^0.8.0",
-    "traceablepeerconnection": "https://github.com/sarumjanuch/traceablepeerconnection.git"
   },
   "optionalDependencies": {
     "promiscuous": "^0.6.0"

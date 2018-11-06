@@ -47,7 +47,6 @@ module.exports = function (SIP) {
         };
 
         this.peerConnection = new SIP.WebRTC.RTCPeerConnection(RTCPeerConnectionConfig, this.RTCConstraints);
-
         // Firefox (35.0.1) sometimes throws on calls to peerConnection.getRemoteStreams
         // even if peerConnection.onaddstream was just called. In order to make
         // MediaHandler.prototype.getRemoteStreams work, keep track of them manually
@@ -234,7 +233,7 @@ module.exports = function (SIP) {
 
             return streamPromise
                 .then(function streamAdditionSucceeded() {
-                    if (self.hasOffer('remote')) {
+                    /*if (self.hasOffer('remote')) {
                         self.peerConnection.ondatachannel = function (evt) {
                             self.dataChannel = evt.channel;
                             self.emit('dataChannel', self.dataChannel);
@@ -246,7 +245,7 @@ module.exports = function (SIP) {
                             mediaHint.dataChannel
                         );
                         self.emit('dataChannel', self.dataChannel);
-                    }
+                    }*/
 
                     self.render();
                     return self.createOfferOrAnswer(self.RTCConstraints, forceMethod);

@@ -1741,7 +1741,7 @@ InviteClientContext.prototype = {
           self.status = C.STATUS_INVITE_SENT;
           self.send();
         },
-        function onFailure() {
+        function onFailure(e) {
           if (self.status === C.STATUS_TERMINATED) {
             return;
           }
