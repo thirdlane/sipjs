@@ -449,10 +449,10 @@ module.exports = function (SIP, environment) {
         function tryReconnect() {
             if (!self.reconnectionTimeout) {
                 self.reconnectionTimeout = setTimeout(function () {
-                    if (C.STATUS_USER_CLOSED) {
+                    self.reconnectionTimeout = null;
+                    if (self.status === C.STATUS_USER_CLOSED) {
                         return;
                     }
-                    self.reconnectionTimeout = null;
                     self.connect()
                         .catch(function () {
                             self.emit('connect_failed');
