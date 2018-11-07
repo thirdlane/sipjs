@@ -343,6 +343,7 @@ module.exports = function (SIP, environment) {
             if (this.status === C.STATUS_USER_CLOSED) {
                 this.logger.warn('UA already closed');
                 resolve();
+                return;
             }
 
             // Clear transportRecoveryTimer
