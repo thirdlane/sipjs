@@ -340,6 +340,8 @@ module.exports = function (SIP, environment) {
                 clearTimeout(self.reconnectionTimeout);
             }
 
+            this.reconnectionTimeout = null;
+
             if (this.status === C.STATUS_USER_CLOSED) {
                 this.logger.warn('UA already closed');
                 resolve();
