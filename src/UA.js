@@ -438,40 +438,44 @@ module.exports = function (SIP, environment) {
         }, Promise.resolve());
     };
 
+
+
+    UA.prototype.tryReconnect = function() {
+        const self = this;
+        const RECONNECTION_TIMEOUT = 10000;
+
+        if (!self.reconnectionTimeout) {
+            self.reconnectionTimeout = setTimeout(function () {
+                self.reconnectionTimeout = null;
+                if (self.status === C.STATUS_USER_CLOSED) {
+                    return;
+                }
+                self.connect()
+                    .catch(function () {
+                        self.emit('connect_failed');
+                    });
+            }, RECONNECTION_TIMEOUT);
+        }
+    };
+
+
     /**
      * Connect to the WS server if status = STATUS_INIT.
      * Resume UA after being closed.
      *
      */
     UA.prototype.start = function () {
-        const RECONNECTION_TIMEOUT = 10000;
         const self = this;
-
+        
         this.status = C.STATUS_STARTING;
 
+        this.removeListener('connect_failed', this.tryReconnect);
+        this.removeListener('disconnected', this.tryReconnect);
+        this.removeListener('keepAliveTimeout', this.tryReconnect);
 
-        const tryReconnect = function() {
-            if (!self.reconnectionTimeout) {
-                self.reconnectionTimeout = setTimeout(function () {
-                    self.reconnectionTimeout = null;
-                    if (self.status === C.STATUS_USER_CLOSED) {
-                        return;
-                    }
-                    self.connect()
-                        .catch(function () {
-                            self.emit('connect_failed');
-                        });
-                }, RECONNECTION_TIMEOUT);
-            }
-        };
-
-        this.removeListener('connect_failed', tryReconnect);
-        this.removeListener('disconnected', tryReconnect);
-        this.removeListener('keepAliveTimeout', tryReconnect);
-
-        this.on('connect_failed', tryReconnect);
-        this.on('disconnected', tryReconnect);
-        this.on('keepAliveTimeout', tryReconnect);
+        this.on('connect_failed', this.tryReconnect);
+        this.on('disconnected', this.tryReconnect);
+        this.on('keepAliveTimeout', this.tryReconnect);
 
         return self.connect().catch(function () {
             self.emit('connect_failed');
