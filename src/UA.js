@@ -449,6 +449,7 @@ module.exports = function (SIP, environment) {
 
         this.status = C.STATUS_STARTING;
 
+
         const tryReconnect = function() {
             if (!self.reconnectionTimeout) {
                 self.reconnectionTimeout = setTimeout(function () {
@@ -464,54 +465,17 @@ module.exports = function (SIP, environment) {
             }
         };
 
-        this.off('connect_failed', tryReconnect);
-        this.off('disconnected', tryReconnect);
-        this.off('keepAliveTimeout', tryReconnect);
+        this.removeListener('connect_failed', tryReconnect);
+        this.removeListener('disconnected', tryReconnect);
+        this.removeListener('keepAliveTimeout', tryReconnect);
 
         this.on('connect_failed', tryReconnect);
         this.on('disconnected', tryReconnect);
         this.on('keepAliveTimeout', tryReconnect);
 
-        /*this.on('connect_failed', function () {
-            tryReconnect();
-        });
-
-        this.on('disconnected', function () {
-            tryReconnect();
-        });
-
-        this.on('keepAliveTimeout', function () {
-            this.emit('disconnected', {
-                transport: this.transport,
-                code:      this.transport.lastTransportError.code,
-                reason:    this.transport.lastTransportError.reason
-            });
-        });*/
-
         return self.connect().catch(function () {
             self.emit('connect_failed');
         });
-
-        /*var server;
-
-        this.logger.log('user requested startup...');
-        if (this.status === C.STATUS_INIT) {
-            server = this.getNextWsServer();
-            this.status = C.STATUS_STARTING;
-            new SIP.Transport(this, server);
-        } else if (this.status === C.STATUS_USER_CLOSED) {
-            this.logger.log('resuming');
-            this.status = C.STATUS_READY;
-            this.transport.connect();
-        } else if (this.status === C.STATUS_STARTING) {
-            this.logger.log('UA is in STARTING status, not opening new connection');
-        } else if (this.status === C.STATUS_READY) {
-            this.logger.log('UA is in READY status, not resuming');
-        } else {
-            this.logger.error('Connection is down. Auto-Recovery system is trying to connect');
-        }
-
-        return this;*/
     };
 
     /**
