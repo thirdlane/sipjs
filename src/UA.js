@@ -321,7 +321,7 @@ module.exports = function (SIP, environment) {
      * Gracefully close.
      *
      */
-    UA.prototype.stop = function (opts) {
+    UA.prototype.stop = function (opts, closedByUser) {
         return new Promise((resolve, reject) => {
             var session, subscription, applicant,
                 ua = this;
@@ -372,7 +372,9 @@ module.exports = function (SIP, environment) {
                 this.applicants[applicant].close();
             }
 
-            this.status = C.STATUS_USER_CLOSED;
+            if (closedByUser) {
+                this.status = C.STATUS_USER_CLOSED;
+            }
 
             /*
              * If the remaining transactions are all INVITE transactions, there is no need to
@@ -466,7 +468,7 @@ module.exports = function (SIP, environment) {
      */
     UA.prototype.start = function () {
         const self = this;
-        
+
         this.status = C.STATUS_STARTING;
 
         this.removeListener('connect_failed', this.tryReconnect);
