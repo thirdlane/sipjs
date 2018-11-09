@@ -464,7 +464,15 @@ module.exports = function (SIP, environment) {
             }
         }
 
-        this.on('connect_failed', function () {
+        this.off('connect_failed', tryReconnect);
+        this.off('disconnected', tryReconnect);
+        this.off('keepAliveTimeout', tryReconnect);
+
+        this.on('connect_failed', tryReconnect);
+        this.on('disconnected', tryReconnect);
+        this.on('keepAliveTimeout', tryReconnect);
+
+        /*this.on('connect_failed', function () {
             tryReconnect();
         });
 
@@ -478,7 +486,7 @@ module.exports = function (SIP, environment) {
                 code:      this.transport.lastTransportError.code,
                 reason:    this.transport.lastTransportError.reason
             });
-        });
+        });*/
 
         return self.connect().catch(function () {
             self.emit('connect_failed');
