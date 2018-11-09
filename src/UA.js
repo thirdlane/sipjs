@@ -449,7 +449,7 @@ module.exports = function (SIP, environment) {
 
         this.status = C.STATUS_STARTING;
 
-        function tryReconnect() {
+        const tryReconnect = function() {
             if (!self.reconnectionTimeout) {
                 self.reconnectionTimeout = setTimeout(function () {
                     self.reconnectionTimeout = null;
@@ -462,7 +462,7 @@ module.exports = function (SIP, environment) {
                         });
                 }, RECONNECTION_TIMEOUT);
             }
-        }
+        };
 
         this.off('connect_failed', tryReconnect);
         this.off('disconnected', tryReconnect);
