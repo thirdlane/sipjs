@@ -618,11 +618,11 @@ module.exports = function (SIP, environment) {
         this.status = C.STATUS_READY;
         this.error = null;
 
-        if (this.configuration.register) {
+        /*if (this.configuration.register) {
             this.configuration.authenticationFactory.initialize().then(function () {
                 this.registerContext.onTransportConnected();
             }.bind(this));
-        }
+        }*/
 
         this.emit('connected', {
             transport: transport
