@@ -70,7 +70,7 @@ module.exports = function (SIP, WebSocket) {
             this.keepAliveTimeout = SIP.Timers.setTimeout(function () {
                 this.ua.emit('keepAliveTimeout');
                 this.keepAliveTimeout = null;
-            }.bind(this), 10000);
+            }.bind(this), 5000);
 
             return this.send('\r\n\r\n');
         },

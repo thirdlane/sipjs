@@ -444,7 +444,7 @@ module.exports = function (SIP, environment) {
      *
      */
     UA.prototype.start = function () {
-        const RECONNECTION_TIMEOUT = 20000;
+        const RECONNECTION_TIMEOUT = 10000;
         const self = this;
 
         this.status = C.STATUS_STARTING;
