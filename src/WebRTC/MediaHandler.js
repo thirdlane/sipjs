@@ -425,7 +425,7 @@ module.exports = function (SIP) {
             writable: true,
             value:    function hold() {
                 this.toggleHoldAudio(true);
-                this.toggleHoldAudio(true);
+                this.toggleMuteVideo(true);
             }
         },
 
