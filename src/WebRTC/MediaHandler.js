@@ -580,7 +580,7 @@ module.exports = function (SIP) {
 
         toggleHoldHelper: {
             writable: true,
-            value:    function toggleMuteHelper(trackGetter, mute) {
+            value:    function toggleHoldHelper(trackGetter, mute) {
                 this.getLocalStreams().forEach(function (stream) {
                     stream[trackGetter]().forEach(function (track) {
                         track.enabled = !mute;
@@ -603,8 +603,8 @@ module.exports = function (SIP) {
 
         toggleHoldAudio: {
             writable: true,
-            value:    function toggleHoldHelper(mute) {
-                this.toggleMuteHelper('getAudioTracks', mute);
+            value:    function toggleHoldAudio(mute) {
+                this.toggleHoldHelper('getAudioTracks', mute);
             }
         },
 
