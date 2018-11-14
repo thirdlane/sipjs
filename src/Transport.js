@@ -190,6 +190,7 @@ module.exports = function (SIP, WebSocket) {
          */
         onOpen: function () {
             this.connected = true;
+            this.ua.emit('connected');
 
             this.logger.log('WebSocket ' + this.server.ws_uri + ' connected');
             // Clear reconnectTimer since we are not disconnected

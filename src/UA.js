@@ -432,7 +432,7 @@ module.exports = function (SIP, environment) {
                         this.register(),
                         new Promise(function (resolve, reject) {
                             setTimeout(reject, REGISTER_TIMEOUTE);
-                        })]);  
+                        })]);
                 } else {
                     return Promise.resolve()
                 }
