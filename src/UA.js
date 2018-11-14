@@ -427,11 +427,15 @@ module.exports = function (SIP, environment) {
             },
             () => {
                 this.status = C.STATUS_READY;
-                return Promise.race([
-                    this.register(),
-                    new Promise(function (resolve, reject) {
-                        setTimeout(reject, REGISTER_TIMEOUTE);
-                    })]);
+                if (this.configuration.register) {
+                    return Promise.race([
+                        this.register(),
+                        new Promise(function (resolve, reject) {
+                            setTimeout(reject, REGISTER_TIMEOUTE);
+                        })]);  
+                } else {
+                    return Promise.resolve()
+                }
             }
         ].reduce((promise, i) => {
             return promise.then(() => {
