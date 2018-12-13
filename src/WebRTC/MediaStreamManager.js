@@ -59,15 +59,18 @@ MediaStreamManager.render = function render (streams, elements) {
   }
 
   function attachMediaStream(element, stream) {
-    if (typeof element.src !== 'undefined') {
-      environment.revokeObjectURL(element.src);
-      element.src = environment.createObjectURL(stream);
-    } else if (typeof (element.srcObject || element.mozSrcObject) !== 'undefined') {
-      element.srcObject = element.mozSrcObject = stream;
-    } else {
-      return false;
-    }
-
+      try {
+          element.srcObject = stream;
+      } catch (e) {
+          if (typeof element.src !== 'undefined') {
+              environment.revokeObjectURL(element.src);
+              element.src = environment.createObjectURL(stream);
+          } else if (typeof (element.srcObject || element.mozSrcObject) !== 'undefined') {
+              element.srcObject = element.mozSrcObject = stream;
+          } else {
+              return false;
+          }
+      }
     return true;
   }
 
