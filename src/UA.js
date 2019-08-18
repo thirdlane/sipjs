@@ -1,4 +1,4 @@
-"use strict";
+'use strict';
 /**
  * @augments SIP
  * @class Class creating a SIP User Agent.
@@ -28,7 +28,7 @@ module.exports = function (SIP, environment) {
              */
             EVENT_METHODS: {
                 'invite':  'INVITE',
-                'message': 'MESSAGE'
+                'message': 'MESSAGE',
             },
 
             ALLOWED_METHODS: [
@@ -37,16 +37,16 @@ module.exports = function (SIP, environment) {
                 'BYE',
                 'OPTIONS',
                 'INFO',
-                'NOTIFY'
+                'NOTIFY',
             ],
 
             ACCEPTED_BODY_TYPES: [
                 'application/sdp',
-                'application/dtmf-relay'
+                'application/dtmf-relay',
             ],
 
             MAX_FORWARDS: 70,
-            TAG_LENGTH:   10
+            TAG_LENGTH:   10,
         };
 
     UA = function (configuration) {
@@ -65,7 +65,7 @@ module.exports = function (SIP, environment) {
         this.logger = this.getLogger('sip.ua');
 
         this.cache = {
-            credentials: {}
+            credentials: {},
         };
 
         this.configuration = {};
@@ -85,7 +85,7 @@ module.exports = function (SIP, environment) {
             nist: {},
             nict: {},
             ist:  {},
-            ict:  {}
+            ict:  {},
         };
 
         this.transportRecoverAttempts = 0;
@@ -103,32 +103,32 @@ module.exports = function (SIP, environment) {
                     }
 
                     return count;
-                }
+                },
             },
 
             nictTransactionsCount: {
                 get: function () {
                     return Object.keys(this.transactions['nict']).length;
-                }
+                },
             },
 
             nistTransactionsCount: {
                 get: function () {
                     return Object.keys(this.transactions['nist']).length;
-                }
+                },
             },
 
             ictTransactionsCount: {
                 get: function () {
                     return Object.keys(this.transactions['ict']).length;
-                }
+                },
             },
 
             istTransactionsCount: {
                 get: function () {
                     return Object.keys(this.transactions['ist']).length;
-                }
-            }
+                },
+            },
         });
 
         /**
@@ -142,7 +142,7 @@ module.exports = function (SIP, environment) {
             configuration = {};
         } else if (typeof configuration === 'string' || configuration instanceof String) {
             configuration = {
-                uri: configuration
+                uri: configuration,
             };
         }
 
@@ -199,7 +199,7 @@ module.exports = function (SIP, environment) {
             this.configuration.register = true;
 
             //Avoid Leakage of handlers;
-            const resolveFn = function (){
+            const resolveFn = function () {
                 this.registerContext.removeListener('registered', resolveFn);
                 this.registerContext.removeListener('failed', rejectFn);
                 this.registerContext.removeListener('unregistered', rejectFn);
@@ -210,7 +210,7 @@ module.exports = function (SIP, environment) {
                 this.registerContext.removeListener('registered', resolveFn);
                 this.registerContext.removeListener('failed', rejectFn);
                 this.registerContext.removeListener('unregistered', rejectFn);
-                reject();
+                reject("FAILED_TO_REGISTER");
             }.bind(self);
 
             //For sure, for sure
@@ -327,11 +327,12 @@ module.exports = function (SIP, environment) {
                 ua = this;
 
             function transactionsListener() {
-                if (ua.nistTransactionsCount === 0 && ua.nictTransactionsCount === 0) {
-                    ua.removeListener('transactionDestroyed', transactionsListener);
-                    ua.transport.disconnect(opts);
-                    resolve();
-                }
+                //if (ua.nistTransactionsCount === 0 && ua.nictTransactionsCount === 0) {
+                clearTimeout(this.cleanUpTimeout);
+                ua.removeListener('transactionDestroyed', transactionsListener);
+                ua.transport.disconnect(opts);
+                resolve();
+                //}
             }
 
             this.logger.log('user requested closure...');
@@ -389,6 +390,7 @@ module.exports = function (SIP, environment) {
                 resolve();
             } else {
                 this.on('transactionDestroyed', transactionsListener);
+                this.cleanUpTimeout = setTimeout(transactionsListener, 2000);
             }
 
         });
@@ -398,9 +400,7 @@ module.exports = function (SIP, environment) {
     // unregister -> disconnect -> connect -> register;
     UA.prototype.connect = function () {
         const TRANSPORT_CONNECTION_TIMEOUT = 5000;
-        const REGISTER_TIMEOUTE = 5000;
-        const UNREGISTER_TIMEOUT = 5000;
-
+        const REGISTER_TIMEOUT = 5000;
         const server = this.getNextWsServer();
 
         if (!this.transport) {
@@ -411,32 +411,38 @@ module.exports = function (SIP, environment) {
         //and execute functions sequentially, waiting for the promise from previous to resolve;
         return [
             () => {
-                return Promise.race([
-                    this.stop({silent: true}),
-                    new Promise(function (resolve, reject) {
-                        setTimeout(reject, UNREGISTER_TIMEOUT);
-                    })
-                ])
+                return this.stop({silent: true});
             },
             () => {
                 return Promise.race([
                     this.transport.connect(),
-                    new Promise(function (resolve, reject) {
-                        setTimeout(reject, TRANSPORT_CONNECTION_TIMEOUT);
-                    })])
+                    new Promise((resolve, reject) => {
+                        setTimeout(() => {
+                            reject("TRANSPORT_CONNECTION_TIMEOUT")
+                        }, TRANSPORT_CONNECTION_TIMEOUT);
+                    })]);
             },
             () => {
                 this.status = C.STATUS_READY;
                 if (this.configuration.register) {
                     return Promise.race([
-                        this.register(),
-                        new Promise(function (resolve, reject) {
-                            setTimeout(reject, REGISTER_TIMEOUTE);
+                        this.register()
+                            .then(() => {
+                                this.failedReconnectionsAttempts = 0;
+                                if (this.reconnectionTimeout) {
+                                    clearTimeout(this.reconnectionTimeout);
+                                }
+                                this.reconnectionTimeout = null;
+                            }),
+                        new Promise((resolve, reject) => {
+                            setTimeout(() => {
+                                reject("REGISTER_TIMEOUT");
+                            }, REGISTER_TIMEOUT);
                         })]);
                 } else {
-                    return Promise.resolve()
+                    return Promise.resolve();
                 }
-            }
+            },
         ].reduce((promise, i) => {
             return promise.then(() => {
                 return i();
@@ -445,23 +451,33 @@ module.exports = function (SIP, environment) {
     };
 
 
-
-    UA.prototype.tryReconnect = function() {
+    UA.prototype.tryReconnect = function () {
         const self = this;
-        const RECONNECTION_TIMEOUT = 10000;
+        let RECONNECTION_TIMEOUT;
 
-        if (!self.reconnectionTimeout) {
-            self.reconnectionTimeout = setTimeout(function () {
+        if (!this.reconnectionTimeout) {
+            if (self.failedReconnectionsAttempts >= 5) {
+                RECONNECTION_TIMEOUT = Math.floor(Math.random() * (300000 - 150000) + 150000);
+            } else {
+                RECONNECTION_TIMEOUT = 1000;
+            }
+            this.reconnectionTimeout = setTimeout(function () {
                 self.reconnectionTimeout = null;
                 if (self.status === C.STATUS_USER_CLOSED) {
                     return;
                 }
                 self.connect()
-                    .catch(function () {
-                        self.emit('connect_failed');
+                    .catch(function (e) {
+                        if (!self.failedReconnectionsAttempts) {
+                            self.failedReconnectionsAttempts = 1;
+                        } else {
+                            self.failedReconnectionsAttempts += 1;
+                        }
+                        self.emit('connect_failed', e);
                     });
             }, RECONNECTION_TIMEOUT);
         }
+
     };
 
 
@@ -483,8 +499,10 @@ module.exports = function (SIP, environment) {
         this.on('disconnected', this.tryReconnect);
         this.on('keepAliveTimeout', this.tryReconnect);
 
-        return self.connect().catch(function () {
-            self.emit('connect_failed');
+        this.failedReconnectionsAttempts = 0;
+
+        return self.connect().catch(function (e) {
+            self.emit('connect_failed', e);
         });
     };
 
@@ -578,7 +596,7 @@ module.exports = function (SIP, environment) {
         transport.server.status = SIP.Transport.C.STATUS_ERROR;
 
         this.emit('disconnected', {
-            transport: transport
+            transport: transport,
         });
 
         // try the next transport if the UA isn't closed
@@ -629,7 +647,7 @@ module.exports = function (SIP, environment) {
         }*/
 
         this.emit('connected', {
-            transport: transport
+            transport: transport,
         });
     };
 
@@ -643,7 +661,7 @@ module.exports = function (SIP, environment) {
     UA.prototype.onTransportConnecting = function (transport, attempts) {
         this.emit('connecting', {
             transport: transport,
-            attempts:  attempts
+            attempts:  attempts,
         });
     };
 
@@ -667,7 +685,7 @@ module.exports = function (SIP, environment) {
     UA.prototype.destroyTransaction = function (transaction) {
         delete this.transactions[transaction.type][transaction.id];
         this.emit('transactionDestroyed', {
-            transaction: transaction
+            transaction: transaction,
         });
     };
 
@@ -696,9 +714,9 @@ module.exports = function (SIP, environment) {
 
         // Check that request URI points to us
         if (!(ruriMatches(this.configuration.uri) ||
-                ruriMatches(this.contact.uri) ||
-                ruriMatches(this.contact.pub_gruu) ||
-                ruriMatches(this.contact.temp_gruu))) {
+            ruriMatches(this.contact.uri) ||
+            ruriMatches(this.contact.pub_gruu) ||
+            ruriMatches(this.contact.temp_gruu))) {
             this.logger.warn('Request-URI does not point to us');
             if (request.method !== SIP.C.ACK) {
                 request.reply_sl(404);
@@ -726,7 +744,7 @@ module.exports = function (SIP, environment) {
             new SIP.Transactions.NonInviteServerTransaction(request, this);
             request.reply(200, null, [
                 'Allow: ' + SIP.Utils.getAllowedMethods(this),
-                'Accept: ' + C.ACCEPTED_BODY_TYPES
+                'Accept: ' + C.ACCEPTED_BODY_TYPES,
             ]);
             this.emit('options');
         } else if (method === SIP.C.MESSAGE) {
@@ -974,7 +992,7 @@ module.exports = function (SIP, environment) {
                     sip_uri: '<sip:edge.sip.onsip.com;transport=ws;lr>',
                     status:  0,
                     weight:  0,
-                    ws_uri:  'wss://edge.sip.onsip.com'
+                    ws_uri:  'wss://edge.sip.onsip.com',
                 }],
 
                 // Password
@@ -1034,7 +1052,7 @@ module.exports = function (SIP, environment) {
 
                 authenticationFactory: checkAuthenticationFactory(function authenticationFactory(ua) {
                     return new SIP.DigestAuthentication(ua);
-                })
+                }),
             };
 
         // Pre-Configuration
@@ -1090,12 +1108,12 @@ module.exports = function (SIP, environment) {
                 }
 
                 // If the parameter value is null, empty string, or undefined then apply its default value.
-                if (value === null || value === "" || value === undefined) {
+                if (value === null || value === '' || value === undefined) {
                     continue;
                 }
                 // If it's a number with NaN value then also apply its default value.
                 // NOTE: JS does not allow "value === NaN", the following does the work:
-                else if (typeof(value) === 'number' && isNaN(value)) {
+                else if (typeof (value) === 'number' && isNaN(value)) {
                     continue;
                 }
 
@@ -1156,8 +1174,7 @@ module.exports = function (SIP, environment) {
         if (settings.hackIpInContact) {
             if (typeof settings.hackIpInContact === 'boolean') {
                 settings.viaHost = SIP.Utils.getRandomTestNetIP();
-            }
-            else if (typeof settings.hackIpInContact === 'string') {
+            } else if (typeof settings.hackIpInContact === 'string') {
                 settings.viaHost = settings.hackIpInContact;
             }
         }
@@ -1192,7 +1209,7 @@ module.exports = function (SIP, environment) {
                 contact += '>';
 
                 return contact;
-            }
+            },
         };
 
         // media overrides mediaConstraints
@@ -1238,50 +1255,50 @@ module.exports = function (SIP, environment) {
             skeleton   = {},
             parameters = [
                 // Internal parameters
-                "sipjsId",
-                "hostportParams",
+                'sipjsId',
+                'hostportParams',
 
                 // Optional user configurable parameters
-                "uri",
-                "wsServers",
-                "authorizationUser",
-                "connectionRecoveryMaxInterval",
-                "connectionRecoveryMinInterval",
-                "keepAliveInterval",
-                "extraSupported",
-                "displayName",
-                "hackViaTcp", // false.
-                "hackIpInContact", //false
-                "hackWssInTransport", //false
-                "hackAllowUnregisteredOptionTags", //false
-                "contactTransport", // 'ws'
-                "forceRport", // false
-                "iceCheckingTimeout",
-                "instanceId",
-                "noAnswerTimeout", // 30 seconds.
-                "password",
-                "registerExpires", // 600 seconds.
-                "registrarServer",
-                "reliable",
-                "rel100",
-                "replaces",
-                "userAgentString", //SIP.C.USER_AGENT
-                "autostart",
-                "iceServers",
-                "RTCConstraints",
-                "iceTransportPolicy",
-                "traceSip",
-                "usePreloadedRoute",
-                "wsServerMaxReconnection",
-                "wsServerReconnectionTimeout",
-                "mediaHandlerFactory",
-                "media",
-                "mediaConstraints",
-                "authenticationFactory",
+                'uri',
+                'wsServers',
+                'authorizationUser',
+                'connectionRecoveryMaxInterval',
+                'connectionRecoveryMinInterval',
+                'keepAliveInterval',
+                'extraSupported',
+                'displayName',
+                'hackViaTcp', // false.
+                'hackIpInContact', //false
+                'hackWssInTransport', //false
+                'hackAllowUnregisteredOptionTags', //false
+                'contactTransport', // 'ws'
+                'forceRport', // false
+                'iceCheckingTimeout',
+                'instanceId',
+                'noAnswerTimeout', // 30 seconds.
+                'password',
+                'registerExpires', // 600 seconds.
+                'registrarServer',
+                'reliable',
+                'rel100',
+                'replaces',
+                'userAgentString', //SIP.C.USER_AGENT
+                'autostart',
+                'iceServers',
+                'RTCConstraints',
+                'iceTransportPolicy',
+                'traceSip',
+                'usePreloadedRoute',
+                'wsServerMaxReconnection',
+                'wsServerReconnectionTimeout',
+                'mediaHandlerFactory',
+                'media',
+                'mediaConstraints',
+                'authenticationFactory',
 
                 // Post-configuration generated parameters
-                "via_core_value",
-                "viaHost"
+                'via_core_value',
+                'viaHost',
             ];
 
         for (idx in parameters) {
@@ -1289,14 +1306,14 @@ module.exports = function (SIP, environment) {
             skeleton[parameter] = {
                 value:        '',
                 writable:     false,
-                configurable: false
+                configurable: false,
             };
         }
 
         skeleton['register'] = {
             value:        '',
             writable:     true,
-            configurable: false
+            configurable: false,
         };
 
         return skeleton;
@@ -1430,8 +1447,7 @@ module.exports = function (SIP, environment) {
             hackIpInContact: function (hackIpInContact) {
                 if (typeof hackIpInContact === 'boolean') {
                     return hackIpInContact;
-                }
-                else if (typeof hackIpInContact === 'string' && SIP.Grammar.parse(hackIpInContact, 'host') !== -1) {
+                } else if (typeof hackIpInContact === 'string' && SIP.Grammar.parse(hackIpInContact, 'host') !== -1) {
                     return hackIpInContact;
                 }
             },
@@ -1585,7 +1601,7 @@ module.exports = function (SIP, environment) {
             },
 
             iceTransportPolicy: function (iceTransportPolicy) {
-                return iceTransportPolicy
+                return iceTransportPolicy;
             },
 
             RTCConstraints: function (RTCConstraints) {
@@ -1660,8 +1676,8 @@ module.exports = function (SIP, environment) {
                 }
             },
 
-            authenticationFactory: checkAuthenticationFactory
-        }
+            authenticationFactory: checkAuthenticationFactory,
+        },
     };
 
     UA.C = C;
