@@ -41,9 +41,11 @@ module.exports = function (SIP) {
         });
 
         var RTCPeerConnectionConfig = {
-            'iceServers':         servers,
-            'rtcpMuxPolicy':      'negotiate',
-            'iceTransportPolicy': config.iceTransportPolicy
+            iceServers:         servers,
+            rtcpMuxPolicy:      'negotiate',
+            sdpSemantics:       'plan-b',
+            bundlePolicy:         'balanced',
+            iceTransportPolicy: config.iceTransportPolicy
         };
 
         this.peerConnection = new SIP.WebRTC.RTCPeerConnection(RTCPeerConnectionConfig, this.RTCConstraints);
