@@ -27,7 +27,9 @@ WebRTC.isSupported = function () {
 
   if (WebRTC.RTCPeerConnection && WebRTC.RTCSessionDescription) {
     if (WebRTC.getUserMedia) {
-      WebRTC.getUserMedia = SIP.Utils.promisify(environment, 'getUserMedia');
+      if (!window.cordova || window.cordova.platformId !== 'ios') {
+        WebRTC.getUserMedia = SIP.Utils.promisify(environment, 'getUserMedia');
+      }
     }
     _isSupported = true;
   }
