@@ -814,6 +814,13 @@ module.exports = function (SIP, environment) {
                         this.logger.warn('received CANCEL request for a non existent session');
                     }
                     break;
+                case SIP.C.NOTIFY:
+                    if (request.headers['X-Tl-Message']) {
+                        this.emit('phone_status', request);
+                    } else {
+                        request.reply(405);
+                    }
+                    break
                 case SIP.C.ACK:
                     /* Absorb it.
                      * ACK request without a corresponding Invite Transaction
