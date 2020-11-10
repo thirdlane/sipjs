@@ -32,7 +32,7 @@ module.exports = function (SIP, environment) {
       if (WebRTC.getUserMedia) {
         const isReactNative = window.navigator.product === 'ReactNative';
         const cordova = window.cordova;
-        const isAndroid = cordova?.platformId === 'android';
+        const isAndroid = (cordova && cordova.platformId === 'android');
         if ((!isReactNative && !isCordova) || isAndroid) {
           WebRTC.getUserMedia = SIP.Utils.promisify(
               environment,
