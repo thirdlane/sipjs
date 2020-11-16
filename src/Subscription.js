@@ -30,7 +30,6 @@ SIP.Subscription = function (ua, target, event, options) {
   } else {
     this.expires = options.expires;
   }
-  this.requestedExpires = this.expires;
 
   options.extraHeaders.push('Event: ' + this.event);
   options.extraHeaders.push('Expires: ' + this.expires);
@@ -42,7 +41,7 @@ SIP.Subscription = function (ua, target, event, options) {
   this.contact = ua.contact.toString();
 
   options.extraHeaders.push('Contact: '+ this.contact);
-  options.extraHeaders.push('Allow: '+ SIP.UA.C.ALLOWED_METHODS.toString());
+  options.extraHeaders.push('Allow: '+ SIP.Utils.getAllowedMethods(ua));
 
   SIP.Utils.augment(this, SIP.ClientContext, [ua, SIP.C.SUBSCRIBE, target, options]);
 
@@ -57,19 +56,9 @@ SIP.Subscription.prototype = {
   subscribe: function() {
     var sub = this;
 
-     //these states point to an existing subscription, no subscribe is necessary
-    if (this.state === 'active') {
-      this.refresh();
-      return this;
-    } else if (this.state === 'notify_wait') {
-      return this;
-    }
-
     SIP.Timers.clearTimeout(this.timers.sub_duration);
     SIP.Timers.clearTimeout(this.timers.N);
     this.timers.N = SIP.Timers.setTimeout(sub.timer_fire.bind(sub), SIP.Timers.TIMER_N);
-
-    this.ua.earlySubscriptions[this.request.call_id + this.request.from.parameters.tag + this.event] = this;
 
     this.send();
 
@@ -93,17 +82,20 @@ SIP.Subscription.prototype = {
     var expires, sub = this,
         cause = SIP.Utils.getReasonPhrase(response.status_code);
 
-    if ((this.state === 'notify_wait' && response.status_code >= 300) ||
-        (this.state !== 'notify_wait' && this.errorCodes.indexOf(response.status_code) !== -1)) {
+    if (this.errorCodes.indexOf(response.status_code) !== -1) {
       this.failed(response, null);
     } else if (/^2[0-9]{2}$/.test(response.status_code)){
-      this.emit('accepted', response, cause);
-      //As we don't support RFC 5839 or other extensions where the NOTIFY is optional, timer N will not be cleared
-      //SIP.Timers.clearTimeout(this.timers.N);
-
       expires = response.getHeader('Expires');
+      SIP.Timers.clearTimeout(this.timers.N);
 
-      if (expires && expires <= this.requestedExpires) {
+      if (this.createConfirmedDialog(response,'UAC')) {
+        this.id = this.dialog.id.toString();
+        this.ua.subscriptions[this.id] = this;
+        this.emit('accepted', response, cause);
+        // UPDATE ROUTE SET TO BE BACKWARDS COMPATIBLE?
+      }
+
+      if (expires && expires <= this.expires) {
         // Preserve new expires value for subsequent requests
         this.expires = expires;
         this.timers.sub_duration = SIP.Timers.setTimeout(sub.refresh.bind(sub), expires * 900);
@@ -116,10 +108,7 @@ SIP.Subscription.prototype = {
           this.failed(response, SIP.C.INVALID_EXPIRES_HEADER);
         }
       }
-    } else if (response.statusCode > 300) {
-      this.emit('failed', response, cause);
-      this.emit('rejected', response, cause);
-    }
+    } //Used to just ignore provisional responses; now ignores everything except errorCodes and 2xx
   },
 
   unsubscribe: function() {
@@ -131,19 +120,18 @@ SIP.Subscription.prototype = {
     extraHeaders.push('Expires: 0');
 
     extraHeaders.push('Contact: '+ this.contact);
-    extraHeaders.push('Allow: '+ SIP.UA.C.ALLOWED_METHODS.toString());
+    extraHeaders.push('Allow: '+ SIP.Utils.getAllowedMethods(this.ua));
 
-    //makes sure expires isn't set, and other typical resubscribe behavior
+    this.request = new SIP.OutgoingRequest(this.method, this.request.to.uri.toString(), this.ua, null, extraHeaders);
+
+    //MAYBE, may want to see state
     this.receiveResponse = function(){};
-
-    this.dialog.sendRequest(this, this.method, {
-      extraHeaders: extraHeaders,
-      body: this.body
-    });
 
     SIP.Timers.clearTimeout(this.timers.sub_duration);
     SIP.Timers.clearTimeout(this.timers.N);
     this.timers.N = SIP.Timers.setTimeout(sub.timer_fire.bind(sub), SIP.Timers.TIMER_N);
+
+    this.send();
   },
 
   /**
@@ -151,12 +139,9 @@ SIP.Subscription.prototype = {
   */
   timer_fire: function(){
     if (this.state === 'terminated') {
-      this.terminateDialog();
-      SIP.Timers.clearTimeout(this.timers.N);
-      SIP.Timers.clearTimeout(this.timers.sub_duration);
-
-      delete this.ua.subscriptions[this.id];
-    } else if (this.state === 'notify_wait' || this.state === 'pending') {
+      this.close();
+    } else if (this.state === 'pending' || this.state === 'notify_wait') {
+      this.state = 'terminated';
       this.close();
     } else {
       this.refresh();
@@ -167,16 +152,15 @@ SIP.Subscription.prototype = {
   * @private
   */
   close: function() {
-    if (this.state === 'notify_wait') {
-      this.state = 'terminated';
-      SIP.Timers.clearTimeout(this.timers.N);
-      SIP.Timers.clearTimeout(this.timers.sub_duration);
-      this.receiveResponse = function(){};
-
-      delete this.ua.earlySubscriptions[this.request.call_id + this.request.from.parameters.tag + this.event];
-    } else if (this.state !== 'terminated') {
+    if(this.state !== 'terminated') {
       this.unsubscribe();
     }
+
+    this.terminateDialog();
+    SIP.Timers.clearTimeout(this.timers.N);
+    SIP.Timers.clearTimeout(this.timers.sub_duration);
+
+    delete this.ua.subscriptions[this.id];
   },
 
   /**
@@ -187,8 +171,6 @@ SIP.Subscription.prototype = {
 
     this.terminateDialog();
     dialog = new SIP.Dialog(this, message, type);
-    dialog.invite_seqnum = this.request.cseq;
-    dialog.local_seqnum = this.request.cseq;
 
     if(!dialog.error) {
       this.dialog = dialog;
@@ -232,15 +214,6 @@ SIP.Subscription.prototype = {
       return;
     }
 
-    if (!this.dialog) {
-      if (this.createConfirmedDialog(request,'UAS')) {
-        this.id = this.dialog.id.toString();
-        delete this.ua.earlySubscriptions[this.request.call_id + this.request.from.parameters.tag + this.event];
-        this.ua.subscriptions[this.id] = this;
-        // UPDATE ROUTE SET TO BE BACKWARDS COMPATIBLE?
-      }
-    }
-
     sub_state = request.parseHeader('Subscription-State');
 
     request.reply(200, SIP.C.REASON_200);
@@ -248,19 +221,6 @@ SIP.Subscription.prototype = {
     SIP.Timers.clearTimeout(this.timers.N);
 
     this.emit('notify', {request: request});
-
-    // if we've set state to terminated, no further processing should take place
-    // and we are only interested in cleaning up after the appropriate NOTIFY
-    if (this.state === 'terminated') {
-      if (sub_state.state === 'terminated') {
-        this.terminateDialog();
-        SIP.Timers.clearTimeout(this.timers.N);
-        SIP.Timers.clearTimeout(this.timers.sub_duration);
-
-        delete this.ua.subscriptions[this.id];
-      }
-      return;
-    }
 
     switch (sub_state.state) {
       case 'active':
@@ -304,7 +264,6 @@ SIP.Subscription.prototype = {
   failed: function(response, cause) {
     this.close();
     this.emit('failed', response, cause);
-    this.emit('rejected', response, cause);
     return this;
   },
 
