@@ -12,8 +12,8 @@ module.exports = function (SIP, environment) {
 
   WebRTC.MediaHandler = require('./WebRTC/MediaHandler')(SIP);
   WebRTC.MediaStreamManager = require('./WebRTC/MediaStreamManager')(
-      SIP,
-      environment,
+    SIP,
+    environment,
   );
 
   var _isSupported;
@@ -32,11 +32,12 @@ module.exports = function (SIP, environment) {
       if (WebRTC.getUserMedia) {
         const isReactNative = window.navigator.product === 'ReactNative';
         const cordova = window.cordova;
-        const isAndroid = (cordova && cordova.platformId === 'android');
-        if ((!isReactNative && !isCordova) || isAndroid) {
+        const isCordova = !!cordova;
+        const isCordovaAndroid = isCordova && cordova.platformId === 'android';
+        if ((!isReactNative && !isCordova) || isCordovaAndroid) {
           WebRTC.getUserMedia = SIP.Utils.promisify(
-              environment,
-              'getUserMedia',
+            environment,
+            'getUserMedia',
           );
         }
       }
