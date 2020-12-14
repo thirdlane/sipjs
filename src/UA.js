@@ -328,7 +328,7 @@ module.exports = function (SIP, environment) {
 
             function transactionsListener() {
                 //if (ua.nistTransactionsCount === 0 && ua.nictTransactionsCount === 0) {
-                clearTimeout(this.cleanUpTimeout);
+                clearTimeout(ua.cleanUpTimeout);
                 ua.removeListener('transactionDestroyed', transactionsListener);
                 ua.transport.disconnect(opts);
                 resolve();
@@ -338,7 +338,7 @@ module.exports = function (SIP, environment) {
             this.logger.log('user requested closure...');
 
             if (this.reconnectionTimeout) {
-                clearTimeout(self.reconnectionTimeout);
+                clearTimeout(this.reconnectionTimeout);
             }
 
             this.reconnectionTimeout = null;
