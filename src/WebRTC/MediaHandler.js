@@ -42,8 +42,7 @@ module.exports = function (SIP) {
 
         var RTCPeerConnectionConfig = {
             iceServers:         servers,
-            rtcpMuxPolicy:      'negotiate',
-            sdpSemantics:       'plan-b',
+            sdpSemantics:       'unified-plan',
             bundlePolicy:         'balanced',
             iceTransportPolicy: config.iceTransportPolicy
         };
